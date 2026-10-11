@@ -15,6 +15,17 @@ its goal. On the development sequence it is right where it holds a pose but cann
 on 22 % of the frames. On the test sequence it also cannot keep its map's scale. The full account is in
 **[`theory/closing-report.md`](theory/closing-report.md)**.
 
+**What the project is also a record of.** The method, and one thing it taught us about itself. Every stage went
+through a contract whose checks and thresholds were fixed before any code, a script decided pass or fail, and one
+sequence was held out and scored once. The central instrument was the **oracle ladder**: replace one estimated
+quantity at a time with ground truth and read off the error that remains. As diagnosis it worked, finding three
+defects an integrated failing system would have hidden. As a way to *choose and build* components it failed in a
+specific way: a part selected under ideal conditions is never scored on latency, density or feedback. The adopted
+depth filter needs about 40 frames to make a point, passed every oracle test, and is what lost the integrated
+system at frame 1248. That risk was forecast in numbers two days before the build and came true as forecast
+(section 3). The coverage miss is therefore a measured result about the method, not only a failure of the product.
+Section 4 and the closing report, section 9, say what we would keep and what we would change.
+
 ---
 
 ## 1. What the system does
@@ -83,13 +94,61 @@ private working repository). All numbers and their definitions are in
 
 Why each verdict reads as it does: [`theory/closing-report.md`](theory/closing-report.md), section 4.
 
+**The forecast that held.** On 2026-10-04, two days before integration, the adopted mapper's map at true poses
+was projected through the tracker's visibility tests: it would support a full pose (30 or more expected
+correspondences) on about **0.45–0.49** of the frames, against 0.74 for the perfect map, with no supported frame
+before about 20 s (rulings R56-1 to R56-4; `theory/expected-performance.md`, "Support forecast at true poses").
+The integrated system then reached 0.22 and lost the map at frame 1248 for want of density. The miss was
+predicted by the mechanism that caused it.
+
 **For comparison** (not a ranking): ORB-SLAM3 monocular covers both sequences in 3–8 separate maps, each with its
 own scale. With ground-truth depth (RGB-D mode) it holds one map for most of the development sequence, so the
 difficulty is monocular geometry, not the scene (closing report, sections 5 and 6).
 
 ---
 
-## 4. Running it
+## 4. How it was built, and what the method found
+
+**The loop.**
+- **Staged contracts.** Every change went through a stage contract whose checks and thresholds were fixed *before*
+  any code was written. A verifier script computed pass or fail.
+- **Standing checks.** Finite-difference checks of the bundle-adjustment and pose-graph derivatives, and a
+  map-consistency check, re-ran on every stage.
+- **The record.** 45 contracts between 2026-09-17 and 2026-10-11: 33 verified, 12 failed and replanned. None of
+  the failures was a coding error; every one traced to the harness, a wrong bar or premise in the contract, a real
+  measurement no bar covered, or a design withdrawn before the build.
+- **The roles.** I built this with AI agents (Claude models, through Claude Code) inside a verification loop I
+  designed. Three agents planned, reviewed and built each stage; two scripts verified and sequenced it; I ruled on
+  every decision of substance. See [`WORKFLOW.md`](WORKFLOW.md) and the closing report, section 9.
+
+**The oracle ladder, as diagnosis.** Feeding the old chain perfect inputs one kind at a time found the near-180°
+orientation flips, the lens-distortion depth bias and the front end as the cause of the depth error, and showed
+that unit-length steps leave a 0.91 m error floor even with perfect rotations. That decided the architecture.
+
+**The oracle ladder, as a design tool.** Each new component was chosen by its score with the other parts replaced
+by ground truth (a mapper on true poses, a tracker on a perfect map) and the parts were joined last. Under ideal
+conditions the bars scored accuracy and coverage at steady state and never time-to-first-point, point density along
+the route, or the feedback of a thin map on the tracker. The depth filter's 40-frame latency passed every bar and
+lost the integrated system. The bars an integration-aware ladder would have needed, and did not have:
+- points available within N frames of a keyframe (time-to-first-point);
+- map extent along the true path, and point density per metre of path;
+- the tracker's support (frames with 30 or more expected correspondences) on the mapper's *own* map, not on a
+  perfect one.
+
+The last of these was measured on 2026-10-04 as a workshop forecast (section 3) and was right. It was not a bar,
+so it did not stop the build. The counterfactual, a crude end-to-end system first with oracle swaps used to find
+the weakest link, was not run; that it would have surfaced the problem weeks earlier is our reasoning, not a
+measurement.
+
+**What the original code got wrong.** See [`DIAGNOSIS.md`](DIAGNOSIS.md),
+[`PROJECT_EVALUATION.md`](PROJECT_EVALUATION.md) and the closing report, section 2. In short: wrong derivatives,
+an inflated success counter, inconsistent map tables, a loop closer seeded from the drifted pose, near-180°
+orientation flips, ignored lens distortion, and a unit-step chain whose error floor is 0.91 m even with perfect
+rotations and directions.
+
+---
+
+## 5. Running it
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
@@ -117,31 +176,14 @@ evo_ape tum $DS/groundtruth.txt est.txt -va --align --correct_scale
   chain's relocalizer; the map tracker's own relocalization stays on.
 - `--default_k` uses the TUM freiburg2 intrinsics.
 - A full run takes about 10 minutes on a laptop.
-- Leave out `--no_display` for the 3D viewer, which needs Pangolin built from source.
+- Leave out `--no_display` for the 3D viewer, which needs Pangolin built from source with its Python bindings.
+  Headless runs and the tests need neither Pangolin nor PyOpenGL.
 - Unit tests: `pip install -r requirements.lock`, then `pytest tests/`. The two derivative checks the tests call are
   in `system/verify/checks/`.
 - The project's own scorers (coverage, labels, J, map depth) belong to the evaluation harness, which is not part of
   this repository. Path accuracy is scored with evo as above.
 - The ORB-SLAM3 reference runs are reproducible with
   `REF_DATASET_DIR=$DS bash scripts/reference_orbslam3.sh`.
-
----
-
-## 5. How it was built
-
-- **Staged contracts.** Every change went through a stage contract whose checks and thresholds were fixed *before*
-  any code was written. A verifier script computed pass or fail.
-- **Standing checks.** Finite-difference checks of the bundle-adjustment and pose-graph derivatives, and a
-  map-consistency check, re-ran on every stage.
-- **The record.** 45 contracts between 2026-09-17 and 2026-10-11: 33 verified, 12 failed and replanned.
-- **The roles.** I built this with AI agents (Claude models, through Claude Code) inside a verification loop I
-  designed. Three agents planned, reviewed and built each stage; two scripts verified and sequenced it; I ruled on
-  every decision of substance. See [`WORKFLOW.md`](WORKFLOW.md) and the closing report, section 9.
-- **What the original code got wrong.** See [`DIAGNOSIS.md`](DIAGNOSIS.md),
-  [`PROJECT_EVALUATION.md`](PROJECT_EVALUATION.md) and the closing report, section 2. In short: wrong derivatives,
-  an inflated success counter, inconsistent map tables, a loop closer seeded from the drifted pose, near-180°
-  orientation flips, ignored lens distortion, and a unit-step chain whose error floor is 0.91 m even with perfect
-  rotations and directions.
 
 ---
 

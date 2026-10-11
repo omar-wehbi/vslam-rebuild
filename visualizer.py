@@ -1,10 +1,22 @@
 import os
 import time
 
-import OpenGL.GL as gl
-import pypangolin as pangolin
 import cv2
 import numpy as np
+
+# The 3D viewer needs PyOpenGL and Pangolin's Python bindings (built from source). A headless run
+# (--no_display) and the test suite need neither, so the import failure is deferred to the moment a
+# window is actually requested (VOVisualizer.__init__) instead of breaking `import pipeline`.
+try:
+    import OpenGL.GL as gl
+    import pypangolin as pangolin
+    PANGOLIN_AVAILABLE = True
+    PANGOLIN_IMPORT_ERROR = None
+except ImportError as _e:
+    gl = None
+    pangolin = None
+    PANGOLIN_AVAILABLE = False
+    PANGOLIN_IMPORT_ERROR = _e
 
 
 def _pix_attach(px, total=1024):
@@ -147,6 +159,12 @@ class VOVisualizer:
 
     def __init__(self, camera_spacing=None, show_grid=True,
                  show_traj=True, ground_truth_path=None, stop_requested_check=None):
+        if not PANGOLIN_AVAILABLE:
+            raise RuntimeError(
+                "The 3D viewer needs PyOpenGL and pypangolin (Pangolin built from source with its Python "
+                "bindings; see requirements.txt). Run with --no_display for a headless run. "
+                f"Import error: {PANGOLIN_IMPORT_ERROR}"
+            )
         self.trajectory = []
         self.is_initialized = False
         self.camera_spacing = camera_spacing
