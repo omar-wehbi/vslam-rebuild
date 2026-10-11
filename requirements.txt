@@ -1,0 +1,70 @@
+# Visual Odometry / V-SLAM dependencies
+setuptools>=60
+wheel
+numpy>=1.20
+opencv-python>=4.5
+scipy>=1.7
+PyOpenGL>=3.1
+
+# -----------------------------------------------------------------------------
+# Bag-of-Words loop closure (optional; used when --loop_detection_strategy bow)
+# -----------------------------------------------------------------------------
+# Recommended backend: loopclosuretoolbox (build from source). pyDBoW3 is listed
+# below as optional; pip install often fails on Python 3.10+.
+#
+# ---- Full install and usage ----
+#
+# 1. Install system dependencies (once per machine)
+#    Ubuntu/Debian:
+#      sudo apt install -y git cmake g++ python3-dev ninja-build libopencv-dev
+#
+# 2. Create and activate the project venv, install main requirements
+#    cd /path/to/full_VSLAM
+#    python3 -m venv venv
+#    source venv/bin/activate
+#    pip install -r requirements.txt
+#
+# 3. Install loopclosuretoolbox (from project root with venv activated)
+#    ./scripts/install_loopclosure_toolbox.sh
+#    This will: clone the toolbox into .deps/loop-closure-toolbox, patch DBoW3
+#    for Linux/macOS, run pip install -e ., build libVLAD.so and libDBoW3.so,
+#    and copy them into your venv's site-packages. At the end it prints an
+#    export LD_LIBRARY_PATH=... line.
+#
+# 4. Set LD_LIBRARY_PATH so Python can load the toolbox at runtime (pick one)
+#    A) In the current terminal only (before each run):
+#       export LD_LIBRARY_PATH="/path/to/full_VSLAM/venv/lib/python3.12/site-packages":$LD_LIBRARY_PATH
+#       (Use the exact path the install script printed.)
+#    B) In every new terminal: add that same export line to ~/.bashrc, then
+#       run: source ~/.bashrc
+#       (You will need to activate the venv again: source venv/bin/activate)
+#    C) Do not set it; use the wrapper script when running the pipeline:
+#       ./scripts/run_with_bow.sh python main.py ...
+#
+# 5. Verify the toolbox loads
+#    ./scripts/run_with_bow.sh python -c "import loopclosuretoolbox.dbow as dbow; print('OK')"
+#    Or with LD_LIBRARY_PATH already set: python -c "import loopclosuretoolbox.dbow; print('OK')"
+#
+# 6. Vocabulary file
+#    Use a DBoW3-compatible vocabulary (e.g. YAML). The toolbox repo provides
+#    one at: .deps/loop-closure-toolbox/config/sthereo_01_rgb_4_3.yaml
+#    Use its full path when running (see step 7).
+#
+# 7. Run the pipeline with BoW loop closure
+#    With wrapper (no need to set LD_LIBRARY_PATH in the shell):
+#      ./scripts/run_with_bow.sh python main.py \
+#        --loop_detection_strategy bow \
+#        --vocabulary_path /path/to/full_VSLAM/.deps/loop-closure-toolbox/config/sthereo_01_rgb_4_3.yaml \
+#        <other args>
+#    Or with LD_LIBRARY_PATH already set and venv active:
+#      python main.py --loop_detection_strategy bow --vocabulary_path <path> <other args>
+#
+# If the vocabulary fails to load, the pipeline falls back to the spaced strategy
+# (5 keyframes) and prints a warning. Ensure the path is correct and the toolbox
+# imports successfully (step 5).
+# -----------------------------------------------------------------------------
+pyDBoW3
+
+# Pangolin (3D viz): not on PyPI. Build from source and enable Python bindings:
+#   https://github.com/stevenlovegrove/Pangolin
+#   cmake -DBUILD_PANGOLIN_PYTHON=ON -DBUILD_PYPANGOLIN_MODULE=ON ..
