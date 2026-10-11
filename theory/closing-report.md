@@ -76,6 +76,13 @@ place.
 **What we would keep.** The verification method, the oracle ladder and the foundation repairs, all reusable (section 9). The
 clearest next step is not to map while turning in place (`theory/deferred-designs.md`).
 
+**What the method taught us about itself.** The oracle ladder worked as diagnosis and failed as a design tool,
+for a reason that can be stated and fixed: a component selected under ideal conditions is never scored on latency,
+density or the feedback of its output on the next part. The depth filter's 40-frame latency passed every oracle bar
+and lost the integrated system at frame 1248. That outcome was forecast in numbers on 2026-10-04, two days before
+integration, and held. The coverage miss is therefore the measured result of using the ladder to select
+components, and section 9.1 names the bars that were missing.
+
 ---
 
 ## 2. Where we started
@@ -468,7 +475,60 @@ designed this loop so that no agent's claim would count until a script had measu
 The finite-difference and map-consistency checks re-ran on every stage, and predictions were registered before
 results. `WORKFLOW.md` describes the loop in more detail.
 
-**The record.** 45 stage contracts between 2026-09-17 and 2026-10-11: 33 verified, 12 failed and replanned.
+### 9.1 What the oracle ladder could and could not do
+
+This is the project's one finding about its own method. The ladder was used twice, for two different jobs, and
+the two jobs had different outcomes.
+
+**As diagnosis, it worked.** Feeding the old chain perfect inputs one kind at a time (section 3) found the
+near-180° flips, the lens-distortion bias and the front end as the cause of the depth error, and measured the
+0.91 m floor of a unit-step chain. An integrated, failing system would have hidden all four. Stage 03 also had
+the better order: it swapped one oracle at a time *into* a running whole, so every reading was a reading of the
+whole.
+
+**As a design tool, it failed in a specific way.**
+- **Components were selected on oracles and integrated last.** Each part of the new system was chosen by its score
+  with the other parts replaced by ground truth (the mapper on true poses, the tracker on a perfect map), and the
+  parts were joined only at the end (2026-10-06).
+- **The bars scored steady state.** Every oracle bar measured accuracy or coverage once the part was running:
+  depth (a) and (c) for the mapper, full-pose coverage and J for the tracker. None measured time-to-first-point,
+  point density along the route, or the feedback of a thin map on the tracker that must pose against it.
+- **So latency passed every bar.** The adopted depth filter needs about 40 frames to create a point
+  `[measured: 04j]`. That latency is what thinned the map to 28 inliers at frame 1248 on the development sequence
+  and lost the integrated system for the remaining 1,296 frames `[workshop measurement: theory/workshop/60]`.
+- **The risk was forecast and the forecast held.** It was named as the integration's first risk on 2026-09-23.
+  On 2026-10-04 the adopted mapper's map at true poses was projected through the tracker's visibility tests: it
+  would support a full pose on about 0.45–0.49 of the frames, against 0.74 for the perfect map, with no supported
+  frame before about 20 s `[workshop measurement: theory/workshop/56; R56-1 to R56-4]`. Integration reached 0.22.
+  The forecast was a workshop measurement, not a bar, so it did not stop the build.
+
+**The bars an integration-aware ladder would have needed.** `[reasoning]`
+- points available within N frames of a keyframe (time-to-first-point), with N read from the tracker's loss
+  onsets;
+- map extent along the true path, and point density per metre of path;
+- the tracker's support (frames with at least 30 expected correspondences) on the mapper's *own* map, scored as a
+  bar on every mapper stage rather than once as a forecast.
+
+Each of these is a pose-only or map-only quantity the harness already had the files to compute; none was in a
+contract.
+
+**The counterfactual was not run.** `[reasoning]` A crude end-to-end system first, improved at its weakest link
+with oracle swaps used to find that link, would likely have surfaced the extent and density problem weeks earlier.
+That arm was not built, so this is our inference from the record, not a measurement.
+
+### 9.2 What worked, and we would keep
+
+- the verifier is code;
+- contracts are locked before the build;
+- standing derivative and invariant checks;
+- predictions registered before results;
+- adverse outcomes committed in advance;
+- one sequence held out and scored once;
+- the oracle ladder, as a diagnostic, with the bars of 9.1 added when it is used to select.
+
+### 9.3 The record
+
+45 stage contracts between 2026-09-17 and 2026-10-11: 33 verified, 12 failed and replanned
 `[workshop reading 2026-10-08, runs/*/attempt-*/orchestrator.json]`:
 - **None of the failures was a coding error.** In all of them the executor built what the contract asked.
 - **The causes were:**
@@ -478,32 +538,8 @@ results. `WORKFLOW.md` describes the loop in more detail.
   - a design withdrawn before the build.
 - **Two verified stages carried a bar that failed by construction.** It was caught only in the harness dry run.
 
-`[reasoning]` The weak link was writing the specification, not building.
-
-**What worked, and we would keep:**
-- the verifier is code;
-- contracts are locked before the build;
-- standing derivative and invariant checks;
-- predictions registered before results;
-- adverse outcomes committed in advance;
-- one sequence held out and scored once.
-
-The oracle ladder worked as **diagnosis**. It found the near-180° flips, the lens-distortion bias and the front end
-as the cause of the depth error. An integrated, failing system would have hidden all three.
-
-**What we would change: the development order.**
-- **Components were selected on oracles and integrated last.** Each component was chosen by its score under ideal
-  conditions (true poses, a perfect map), and the parts were joined only at the end.
-- **Under ideal conditions, selection cannot see latency, density or feedback.** The adopted depth filter needs
-  about 40 frames to create a point `[measured: 04j]`. That latency is what lost the integrated system at frame
-  1248 on the development sequence `[workshop measurement: theory/workshop/60]`.
-- **The risk was named early and did not change the plan.** It was named as the integration's first risk on
-  2026-09-23 and again, with a registered forecast, on 2026-10-04 (R56-1). Integration still came last (2026-10-06),
-  and the risk materialized as forecast.
-- **Stage 03 had the better order.** It swapped one oracle at a time *into* a running whole.
-
-`[reasoning]` A crude end-to-end system first, improved at its weakest link with oracle swaps used to find that
-link, would likely have surfaced the extent and density problem weeks earlier.
+`[reasoning]` The weak link was writing the specification, not building. Section 9.1 is the largest instance:
+the specification that was missing was not a threshold on a stage but a bar on the integration.
 
 **Planned follow-ups** (not part of this project's program):
 1. a retrospective on the workflow, measuring cause, time and cost per failure;
